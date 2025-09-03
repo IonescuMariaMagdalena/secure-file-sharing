@@ -4,3 +4,5 @@ uploads
 tmp
 .DS_Store
 MirceacelBatran12*
+backend/.env
+frontend/.env
