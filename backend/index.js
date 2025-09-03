@@ -5,46 +5,46 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+
+// modele / rute
 const User = require("./User");
+const filesRoutes = require("./filesRoutes");
+const shareRoutes = require("./shareRoutes");
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+const app = express();                              // 1) creezi app
+const PORT = process.env.PORT || 8080;              // pune 8080 by default
 
-// Conectare la MongoDB
+// conexiune DB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ Connected to MongoDB Atlas"))
   .catch(err => console.error("❌ MongoDB error:", err));
 
-app.use(cors());
+// middleware globale
+app.use(cors({ origin: "http://localhost:5173" }));
 app.use(express.json());
-app.use((req, res, next) => {
+
+// (opțional) logger simplu
+app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
   next();
 });
 
-
-// Ruta test
-app.get("/", (req, res) => {
+// ruta test
+app.get("/", (_req, res) => {
   res.send("✅ Backend is running with MongoDB!");
 });
 
-// Register
+// --- AUTH ---
 app.post("/api/auth/register", async (req, res) => {
-  const { username, email, password } = req.body;
-
+  const { username, email, password } = req.body || {};
   if (!username || !email || !password) {
     return res.status(400).json({ message: "Toate câmpurile sunt obligatorii" });
   }
-
   try {
     const existing = await User.findOne({ email });
-    if (existing) {
-      return res.status(409).json({ message: "Email deja folosit" });
-    }
-
+    if (existing) return res.status(409).json({ message: "Email deja folosit" });
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ username, email, passwordHash: hash });
-
     res.status(201).json({ message: "Cont creat cu succes!", id: user._id });
   } catch (err) {
     console.error("❌ Eroare la register:", err);
@@ -52,23 +52,14 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-// Login
 app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
-
+  const { email, password } = req.body || {};
   try {
     const user = await User.findOne({ email });
     if (!user) return res.status(401).json({ message: "Email sau parolă greșită" });
-
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ message: "Email sau parolă greșită" });
-
-    const token = jwt.sign(
-      { id: user._id, username: user.username },
-      process.env.JWT_SECRET,
-      { expiresIn: "2h" }
-    );
-
+    const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: "2h" });
     res.json({ token });
   } catch (err) {
     console.error("❌ Eroare la login:", err);
@@ -76,7 +67,13 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+// --- FILES & SHARE --- montează DUPĂ ce ai app creat
+app.use("/api/files", filesRoutes);
+app.use("/api/share", shareRoutes);
+
+// pornire server
+app.listen(process.env.PORT || 8080, "0.0.0.0", () => {
+  console.log(`🚀 API on http://localhost:${process.env.PORT || 8080} (listening on 0.0.0.0)`);
 });
+
+
